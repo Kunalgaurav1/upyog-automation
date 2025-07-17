@@ -1,7 +1,7 @@
 # UPYOG Selenium Test Automation
 
 ## Overview
-This project contains automated test scripts for the UPYOG pet registration application using Selenium WebDriver with Java. The automation suite simulates user interactions with the web application to verify functionality of the pet registration workflow.
+This project contains automated test scripts for the UPYOG pet registration and Trade License applications using Selenium WebDriver with Java. The automation suite simulates user interactions with the web application to verify functionality of both pet registration and Trade License workflows.
 
 ## Features
 - Automated login with OTP verification
@@ -9,6 +9,7 @@ This project contains automated test scripts for the UPYOG pet registration appl
 - Navigation to pet registration module
 - Form filling for pet owner details
 - Pet type and breed selection
+- Trade License application processing workflow
 
 ## Prerequisites
 - Java JDK 8 or higher
@@ -25,13 +26,25 @@ This project contains automated test scripts for the UPYOG pet registration appl
 
 ## Project Structure
 - `src/main/java/org/upyog/testing/Automation/PetApplication.java` - Main test script for pet registration workflow
+- `src/main/java/org/upyog/Automation/Modules/TradeLicense/InboxEmpTl.java` - Trade License employee inbox workflow automation
 
 ## Test Flow
+
+### Pet Registration
 1. Login to the application using mobile number and OTP
 2. Select city
 3. Navigate to pet registration module
 4. Fill owner details (father's name, email)
 5. Select pet type and breed
+
+### Trade License
+1. Employee login with username/password
+2. City selection
+3. Navigate to Trade License inbox
+4. Process applications through workflow steps:
+   - Verify and Forward
+   - Approve
+   - Payment processing
 
 ## Usage
 The test is configured as a Spring component with `@PostConstruct` annotation, which means it will run automatically when the Spring context is initialized.
