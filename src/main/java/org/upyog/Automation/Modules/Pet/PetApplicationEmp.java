@@ -1,104 +1,271 @@
 package org.upyog.Automation.Modules.Pet;
-import org.upyog.Automation.Utils.DriverFactory;
-import org.upyog.Automation.Utils.ConfigReader;
-
-
 
 import org.openqa.selenium.By;
-import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.JavascriptExecutor;
-import org.openqa.selenium.interactions.Actions;
-import java.util.List;
+import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.stereotype.Component;
-import java.util.ArrayList;
+import org.upyog.Automation.Utils.ConfigReader;
+import org.upyog.Automation.Utils.DriverFactory;
 
 import javax.annotation.PostConstruct;
-import java.time.Duration;
+import java.util.List;
 
+/**
+ * Automated test class for UPYOG Pet Application Employee Workflow
+ * This class handles the complete employee-side pet application processing including:
+ * - Employee login and city selection
+ * - Navigation to Pet Application Inbox
+ * - Application verification and approval workflow
+ * - Payment collection and receipt generation
+ */
 //@Component
 public class PetApplicationEmp {
 
-    public void handlePopupAndSubmit(WebDriver driver, WebDriverWait wait, String comment, String filePath) throws InterruptedException {
-        // 1. Wait for the comment textarea to be visible and enter comment
-        WebElement commentField = wait.until(
-                ExpectedConditions.visibilityOfElementLocated(By.name("comments"))
-        );
-        commentField.clear();
-        commentField.sendKeys(comment);
+    /**
+     * Main test method for pet application employee workflow
+     * Runs automatically when Spring context is initialized
+     */
+    //@PostConstruct
+    public void petInbox() {
+        System.out.println("Pet Application Employee Workflow");
+        
+        // Initialize WebDriver using DriverFactory
+        WebDriver driver = DriverFactory.createChromeDriver();
+        WebDriverWait wait = DriverFactory.createWebDriverWait(driver);
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+        Actions actions = new Actions(driver);
 
-        // 2. Wait for the file input to be present and upload the file
-        WebElement fileInput = wait.until(
-                ExpectedConditions.presenceOfElementLocated(By.id("workflow-doc"))
-        );
-        fileInput.sendKeys(filePath);
-        System.out.println("document uploaded");
-
-        // 3. Click the Verify or Approve button if present
-        List<WebElement> verifyButtons = driver.findElements(By.xpath("//button[contains(@class, 'selector-button-primary') and .//h2[normalize-space()='Verify']]"));
-        List<WebElement> approveButtons = driver.findElements(By.xpath("//button[contains(@class, 'selector-button-primary') and .//h2[normalize-space()='Approve']]"));
-
-        WebElement actionButton = null;
-        if (!verifyButtons.isEmpty()) {
-            actionButton = verifyButtons.get(0);
-            System.out.println("Verify button found, clicking Verify...");
-        } else if (!approveButtons.isEmpty()) {
-            actionButton = approveButtons.get(0);
-            System.out.println("Approve button found, clicking Approve...");
-        } else {
-            throw new RuntimeException("Neither Verify nor Approve button found!");
+        try {
+            // STEP 1: Employee Login
+            performEmployeeLogin(driver, wait, js, actions);
+            
+            // STEP 2: Navigate to Pet Application Inbox
+            navigateToInbox(driver, wait, js);
+            
+            // STEP 3: Search Application by Number
+            selectFirstApplication(driver, wait, js);
+            
+            // STEP 4: Process Application Workflow (Verify -> Approve -> Pay)
+            processApplicationWorkflow(driver, wait);
+            
+            // STEP 5: Collect Payment
+            collectPayment(driver, wait);
+            
+            // STEP 6: Download Receipts
+            downloadReceipts(driver, wait, js);
+            
+            System.out.println("Pet Application Employee Workflow completed successfully!");
+            Thread.sleep(50000); // Keep browser open for observation
+            
+        } catch (Exception e) {
+            System.out.println("Exception in Pet Application Employee Workflow: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            // Uncomment to close browser after test
+            // driver.quit();
         }
-
-        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", actionButton);
-        Thread.sleep(300);
-        actionButton.click();
     }
 
+    /**
+     * Handles employee login process
+     */
+    private void performEmployeeLogin(WebDriver driver, WebDriverWait wait, JavascriptExecutor js, Actions actions) throws InterruptedException {
+        driver.get(ConfigReader.get("employee.base.url"));
+        driver.manage().window().maximize();
+        System.out.println("Open the Employee Login Portal");
 
+        // Enter credentials from configuration
+        fillInput(wait, "username", ConfigReader.get("app.login.username"));
+        fillInput(wait, "password", ConfigReader.get("app.login.password"));
+        System.out.println("Filled username and password");
 
-    public void clickTakeActionButton(WebDriver driver, WebDriverWait wait) throws InterruptedException {
-        // Wait for the TAKE ACTION button to be clickable
-        WebElement takeActionButton = wait.until(
-                ExpectedConditions.elementToBeClickable(
-                        By.xpath("//button[contains(@class, 'submit-bar') and .//header[normalize-space()='TAKE ACTION']]")
-                )
-        );
-        // Optionally scroll to the button
+        // Select city dropdown
+        selectCityDropdown(driver, wait, actions);
+        
+        // Click Continue button
+        clickButton(wait, js, "//button[contains(@class, 'submit-bar') and .//header[text()='Continue']]");
+    }
+
+    /**
+     * Navigates to Pet Application Inbox
+     */
+    private void navigateToInbox(WebDriver driver, WebDriverWait wait, JavascriptExecutor js) throws InterruptedException {
+        System.out.println("Navigating to Pet Application Inbox");
+        
+        // Wait for page to load after login
+        Thread.sleep(2000);
+        
+        // Click Inbox link
+        WebElement inboxLink = wait.until(ExpectedConditions.elementToBeClickable(
+                By.xpath("//a[@href='/upyog-ui/employee/ptr/petservice/inbox' and contains(text(), 'Inbox')]")));
+        js.executeScript("arguments[0].scrollIntoView(true);", inboxLink);
+        inboxLink.click();
+        System.out.println("Clicked Inbox link");
+    }
+
+    /**
+     * Searches for application by application number
+     */
+    private void selectFirstApplication(WebDriver driver, WebDriverWait wait, JavascriptExecutor js) throws InterruptedException {
+        System.out.println("Searching for application by number");
+        
+        // Wait for application number input field
+        WebElement applicationInput = wait.until(ExpectedConditions.elementToBeClickable(
+                By.cssSelector("input.employee-card-input")));
+        
+        // Fill application number from configuration
+        String applicationNumber = ConfigReader.get("pet.application.number");
+        applicationInput.clear();
+        applicationInput.sendKeys(applicationNumber);
+        System.out.println("Entered application number: " + applicationNumber);
+        
+        // Click Search button
+        WebElement searchButton = wait.until(ExpectedConditions.elementToBeClickable(
+                By.cssSelector("button.submit-bar.submit-bar-search")));
+        searchButton.click();
+        System.out.println("Clicked Search button");
+        
+        // Wait for search results to load
+        Thread.sleep(2000);
+        
+        // Step 5: Select Application from Results
+        WebElement appLink = wait.until(ExpectedConditions.elementToBeClickable(
+                By.linkText(applicationNumber)));
+        appLink.click();
+        System.out.println("Selected application: " + applicationNumber);
+    }
+
+    /**
+     * Processes the complete application workflow: Verify -> Approve -> Pay
+     */
+    private void processApplicationWorkflow(WebDriver driver, WebDriverWait wait) throws InterruptedException {
+        System.out.println("Processing application workflow");
+        
+        // Step 1: Verify
+        clickTakeActionButton(driver, wait);
+        handleTakeActionMenu(driver, wait);
+        System.out.println("Verification completed");
+        
+        // Step 2: Approve
+        clickTakeActionButton(driver, wait);
+        handleTakeActionMenu(driver, wait);
+        System.out.println("Approval completed");
+        
+        // Step 3: Pay
+        clickTakeActionButton(driver, wait);
+        handleTakeActionMenu(driver, wait);
+        System.out.println("Payment process initiated");
+    }
+
+    /**
+     * Handles payment collection
+     */
+    private void collectPayment(WebDriver driver, WebDriverWait wait) {
+        System.out.println("Collecting payment");
+        
+        // Enter mobile number for payment
+        WebElement mobileInput = wait.until(ExpectedConditions.visibilityOfElementLocated(By.name("payerMobile")));
+        mobileInput.clear();
+        mobileInput.sendKeys("9847584944");
+        
+        // Click Collect Payment button
+        WebElement collectPaymentButton = wait.until(ExpectedConditions.elementToBeClickable(
+                By.xpath("//button[contains(@class, 'submit-bar') and .//header[normalize-space()='Collect Payment']]")));
+        collectPaymentButton.click();
+        System.out.println("Payment collected");
+    }
+
+    /**
+     * Downloads all available receipts
+     */
+    private void downloadReceipts(WebDriver driver, WebDriverWait wait, JavascriptExecutor js) throws InterruptedException {
+        System.out.println("Downloading receipts");
+        
+        List<WebElement> svgButtons = wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(
+                By.cssSelector("div.primary-label-btn.d-grid")));
+        
+        for (WebElement buttonContainer : svgButtons) {
+            WebElement svg = buttonContainer.findElement(By.tagName("svg"));
+            js.executeScript("arguments[0].scrollIntoView({block: 'center'});", svg);
+            Thread.sleep(300);
+            svg.click();
+            System.out.println("Downloaded: " + buttonContainer.getText().trim());
+            Thread.sleep(1000);
+        }
+        System.out.println("All receipts downloaded");
+    }
+
+    // UTILITY METHODS
+
+    /**
+     * Utility method to fill input fields
+     */
+    private void fillInput(WebDriverWait wait, String fieldName, String value) {
+        WebElement input = wait.until(ExpectedConditions.elementToBeClickable(By.name(fieldName)));
+        input.clear();
+        input.sendKeys(value);
+    }
+
+    /**
+     * Utility method to click buttons with XPath
+     */
+    private void clickButton(WebDriverWait wait, JavascriptExecutor js, String xpath) throws InterruptedException {
+        WebElement button = wait.until(ExpectedConditions.elementToBeClickable(By.xpath(xpath)));
+        js.executeScript("arguments[0].scrollIntoView(true);", button);
+        Thread.sleep(300);
+        button.click();
+    }
+
+    /**
+     * Selects city dropdown during login
+     */
+    private void selectCityDropdown(WebDriver driver, WebDriverWait wait, Actions actions) throws InterruptedException {
+        WebElement cityDropdownContainer = driver.findElement(By.cssSelector("div.select"));
+        WebElement cityDropdownArrow = cityDropdownContainer.findElement(By.tagName("svg"));
+        actions.moveToElement(cityDropdownArrow).click().perform();
+
+        WebElement dropdownOptions = wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("div.options-card")));
+        WebElement firstCityOption = dropdownOptions.findElement(By.cssSelector(".profile-dropdown--item:first-child"));
+        actions.moveToElement(firstCityOption).click().perform();
+    }
+
+    /**
+     * Clicks the TAKE ACTION button
+     */
+    private void clickTakeActionButton(WebDriver driver, WebDriverWait wait) throws InterruptedException {
+        WebElement takeActionButton = wait.until(ExpectedConditions.elementToBeClickable(
+                By.xpath("//button[contains(@class, 'submit-bar') and .//header[normalize-space()='TAKE ACTION']]")));
         ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", takeActionButton);
-        Thread.sleep(300); // Optional small wait
-        // Click the TAKE ACTION button
+        Thread.sleep(300);
         takeActionButton.click();
         System.out.println("Clicked TAKE ACTION button");
     }
 
-
-
-    public void handleTakeActionMenu(WebDriver driver, WebDriverWait wait) {
+    /**
+     * Handles the take action menu and selects appropriate action
+     */
+    private void handleTakeActionMenu(WebDriver driver, WebDriverWait wait) throws InterruptedException {
         try {
-            // Wait for the menu-wrap to appear after clicking TAKE ACTION
-            WebElement menuWrap = wait.until(
-                    ExpectedConditions.visibilityOfElementLocated(By.cssSelector("div.menu-wrap"))
-            );
-            // Get all action options inside the menu
+            WebElement menuWrap = wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("div.menu-wrap")));
             List<WebElement> actionOptions = menuWrap.findElements(By.tagName("p"));
 
-            // Loop through options and click based on your workflow
             for (WebElement option : actionOptions) {
                 String text = option.getText().trim().toUpperCase();
                 if (text.equals("VERIFY")) {
                     option.click();
                     System.out.println("Clicked VERIFY");
-                    handlePopupAndSubmit(driver, wait, "This is an automated verification comment.", "/Users/kaveri/Downloads/upyog-automation/doc.pdf");
+                    handlePopupAndSubmit(driver, wait, "Automated verification comment.", 
+                            ConfigReader.get("document.identity.proof"));
                     break;
                 } else if (text.equals("APPROVE")) {
-                    System.out.println("approve button found");
                     option.click();
                     System.out.println("Clicked APPROVE");
-                    handlePopupAndSubmit(driver, wait, "This is an automated approve comment.", "/Users/kaveri/Downloads/upyog-automation/doc.pdf");
+                    handlePopupAndSubmit(driver, wait, "Automated approval comment.", 
+                            ConfigReader.get("document.identity.proof"));
                     break;
                 } else if (text.equals("PAY")) {
                     option.click();
@@ -106,241 +273,45 @@ public class PetApplicationEmp {
                     break;
                 } else if (text.equals("REJECT")) {
                     System.out.println("Application Rejected");
+                    break;
                 }
             }
         } catch (Exception e) {
-            System.out.println("Take Action Menu not found or no valid option present.");
-            e.printStackTrace();
+            System.out.println("Take Action Menu not found or no valid option present: " + e.getMessage());
         }
     }
 
-
-    //@PostConstruct
-    public void petInbox() {
-        WebDriver driver = DriverFactory.createChromeDriver();
-        WebDriverWait wait = DriverFactory.createWebDriverWait(driver);
-
-
-        // After logging in (or wherever you want to open a new tab)
-        ((JavascriptExecutor) driver).executeScript("window.open('about:blank','_blank');");
-
-        ArrayList<String> tabs = new ArrayList<>(driver.getWindowHandles());
-        driver.switchTo().window(tabs.get(tabs.size() - 1));
-
-
-       // Continue with your next steps here...
-
-
-        try {
-            driver.get("https://upyog.niua.org/upyog-ui/employee/user/login");
-            driver.manage().window().maximize();
-            System.out.println("Open the Login Portal");
-
-            // Read username and password from properties file
-            String username = ConfigReader.get("app.login.username");
-            String password = ConfigReader.get("app.login.password");
-            // Wait for the username input field to be visible and enter the username
-            WebElement usernameInput = wait.until(
-                    ExpectedConditions.visibilityOfElementLocated(By.name("username"))
-            );
-            usernameInput.clear();
-            usernameInput.sendKeys(username); // Use value from properties
-            // Wait for the password input field to be visible and enter the password
-            WebElement passwordInput = wait.until(
-                    ExpectedConditions.visibilityOfElementLocated(By.name("password"))
-            );
-            passwordInput.clear();
-            passwordInput.sendKeys(password); // Use value from properties
-
-
-
-            // 1. Wait for the city dropdown input to be clickable
-            WebElement cityDropdownInput = wait.until(
-                    ExpectedConditions.elementToBeClickable(By.cssSelector("div.select input.employee-select-wrap--elipses"))
-            );
-
-
-            // 2. Click the SVG (dropdown arrow) to open the dropdown
-            WebElement cityDropdownContainer = driver.findElement(By.cssSelector("div.select"));
-            WebElement cityDropdownArrow = cityDropdownContainer.findElement(By.tagName("svg"));
-            cityDropdownArrow.click(); // Or use Actions for reliability
-
-            // Alternatively, using Actions for more robust clicking:
-            Actions actions = new Actions(driver);
-            actions.moveToElement(cityDropdownArrow).click().perform();
-
-            // 3. Wait for the dropdown options to appear
-            WebElement dropdownOptions = wait.until(
-                    ExpectedConditions.visibilityOfElementLocated(By.cssSelector("div.options-card"))
-            );
-
-            // 4. Select the first option (City A)
-            WebElement firstCityOption = dropdownOptions.findElement(By.cssSelector(".profile-dropdown--item:first-child"));
-            actions.moveToElement(firstCityOption).click().perform();
-
-
-            // Wait for the Continue button to be clickable
-            WebElement continueButton = wait.until(
-                    ExpectedConditions.elementToBeClickable(
-                            By.xpath("//button[contains(@class, 'submit-bar') and .//header[text()='Continue']]")
-                    )
-            );
-
-            // Scroll to the button (optional, improves reliability)
-            ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", continueButton);
-
-            // Click the button
-            continueButton.click();
-
-
-
-
-
-//-------------------INBOX LINK---------------------------
-            // Wait for the Inbox link to be present and clickable
-            WebElement inboxLink = wait.until(
-                    ExpectedConditions.elementToBeClickable(
-                            By.xpath("//a[@href='/upyog-ui/employee/ptr/petservice/inbox' and contains(text(), 'Inbox')]")
-                    )
-            );
-            // Optionally scroll to the link (improves reliability)
-            ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", inboxLink);
-
-            // Click the Inbox link
-            inboxLink.click();
-
-
-            System.out.println("now opening the first application");
-
-
-//------------------------SELECTING THE FIRST APPLICATION NUMBER------------------------
-            System.out.println("Getting into the application");
-            WebElement table = wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("table.table")));
-            WebElement firstRow = table.findElement(By.cssSelector("tbody > tr:first-child"));
-            WebElement firstApplicationLink = firstRow.findElement(By.cssSelector("td .link a"));
-            ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", firstApplicationLink);
-            Thread.sleep(300); // Optional
-            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", firstApplicationLink);
-
-
-
-
-
-//-----------------------------TAKE ACTION BUTTON----------------------------
-
-            clickTakeActionButton(driver, wait);
-
-//--------------------TAKE ACTION MENU---------------------------------
-            handleTakeActionMenu(driver, wait); //verify
-
-
-//--------------------------POPUP WORKFLOW-----------------------
-
-
-            System.out.println("again going to approve");
-//--------------------------TAKE ACTION MENU --------------------------------
-            clickTakeActionButton(driver, wait);
-            handleTakeActionMenu(driver, wait); //approve
-
-
-            clickTakeActionButton(driver, wait);
-
-            handleTakeActionMenu(driver, wait); //pay
-
-
-
-
-
-//---------------------- MOBILE NUMBER INPUT ON RECEIPT PAGE -------------
-
-
-            // Wait for the mobile number input field to be visible
-            WebElement mobileInput = wait.until(
-                    ExpectedConditions.visibilityOfElementLocated(By.name("payerMobile"))
-            );
-            // Clear any existing value (optional)
-            mobileInput.clear();
-            // Enter the mobile number
-            mobileInput.sendKeys("9847584944");
-
-
-
-
-//----------------------- COLLECT PAYMENT ----------------------------
-
-
-            WebElement collectPaymentButton = wait.until(
-                    ExpectedConditions.elementToBeClickable(
-                            By.xpath("//button[contains(@class, 'submit-bar') and .//header[normalize-space()='Collect Payment']]")
-                    )
-            );
-            collectPaymentButton.click();
-
-
-
-
-//-----------------------DOWNLOADING THE PAYMENT RECEIPTS ----------------------
-            // Wait for all SVG button containers to be visible
-            List<WebElement> svgButtons = wait.until(
-                    ExpectedConditions.visibilityOfAllElementsLocatedBy(
-                            By.cssSelector("div.primary-label-btn.d-grid")
-                    )
-            );
-// Loop through each button container and click the SVG inside
-            for (WebElement buttonContainer : svgButtons) {
-                // Find the SVG element inside the container
-                WebElement svg = buttonContainer.findElement(By.tagName("svg"));
-                // Optionally scroll into view
-                ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", svg);
-                Thread.sleep(300); // Optional for UI stability
-                // Click the SVG button
-                svg.click();
-                // Optional: print which button was clicked
-                System.out.println("Clicked button: " + buttonContainer.getText().trim());
-                Thread.sleep(1000); // Optional: wait between clicks if needed
-            }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            // Add further steps as needed
-
-            Thread.sleep(50000);
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            //driver.quit(); // Ensure browser closes
+    /**
+     * Handles popup submission with comment and document upload
+     */
+    private void handlePopupAndSubmit(WebDriver driver, WebDriverWait wait, String comment, String filePath) throws InterruptedException {
+        // Enter comment
+        WebElement commentField = wait.until(ExpectedConditions.visibilityOfElementLocated(By.name("comments")));
+        commentField.clear();
+        commentField.sendKeys(comment);
+
+        // Upload document
+        WebElement fileInput = wait.until(ExpectedConditions.presenceOfElementLocated(By.id("workflow-doc")));
+        fileInput.sendKeys(filePath);
+        System.out.println("Document uploaded");
+
+        // Click Verify or Approve button
+        List<WebElement> verifyButtons = driver.findElements(By.xpath("//button[contains(@class, 'selector-button-primary') and .//h2[normalize-space()='Verify']]"));
+        List<WebElement> approveButtons = driver.findElements(By.xpath("//button[contains(@class, 'selector-button-primary') and .//h2[normalize-space()='Approve']]"));
+
+        WebElement actionButton = null;
+        if (!verifyButtons.isEmpty()) {
+            actionButton = verifyButtons.get(0);
+            System.out.println("Clicking Verify button");
+        } else if (!approveButtons.isEmpty()) {
+            actionButton = approveButtons.get(0);
+            System.out.println("Clicking Approve button");
+        } else {
+            throw new RuntimeException("Neither Verify nor Approve button found!");
         }
+
+        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", actionButton);
+        Thread.sleep(300);
+        actionButton.click();
     }
 }
